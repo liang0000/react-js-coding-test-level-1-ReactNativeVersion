@@ -9,11 +9,15 @@ import {
   Modal,
   Image,
   Dimensions,
+  TouchableOpacity,
 } from "react-native";
 import styles from "./styles";
 import * as Services from "@services";
-import { DataTable } from "react-native-paper";
+import { DataTable, Searchbar } from "react-native-paper";
 import { BarChart } from "react-native-chart-kit";
+import * as Print from "expo-print";
+import { shareAsync } from "expo-sharing";
+import { FontAwesome5 } from "@expo/vector-icons";
 
 const optionsPerPage = [2, 3, 4];
 const items = [
@@ -21,9 +25,29 @@ const items = [
   { key: 2, name: "Page 2" },
   { key: 3, name: "Page 3" },
 ];
+const html = (name, url) => {
+  return `
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+</head>
+<body style="text-align: center;">
+  <img
+    src="${url}"
+    style="width: 30vw;" />
+  <h1 style="font-size: 50px; font-family: Helvetica Neue; font-weight: normal;">
+    ${name}
+  </h1>
+</body>
+</html>
+`;
+};
 
 export default function PokeDex() {
-  const [pokemons, setPokemons] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredSearchQuery, setFilteredSearchQuery] = useState([]);
+  const [masterSearchQuery, setMasterSearchQuery] = useState([]);
+  const [sorting, setSorting] = useState(false);
   const [pokemonDetails, setPokemonDetails] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
@@ -37,7 +61,8 @@ export default function PokeDex() {
     setTimeout(() => {
       Services.fetchPokemons().then((res) => {
         if (res) {
-          setPokemons(res);
+          setFilteredSearchQuery(res.results);
+          setMasterSearchQuery(res.results);
           setIsLoading(false);
         }
       });
@@ -48,11 +73,29 @@ export default function PokeDex() {
     setPage(0);
   }, [itemsPerPage]);
 
+  const printToFile = async (name, url) => {
+    const { uri } = await Print.printToFileAsync({ html: html(name, url) });
+    await shareAsync(uri, { UTI: ".pdf", mimeType: "application/pdf" });
+  };
+
+  const searchFilterFunction = (text) => {
+    if (text) {
+      const newData = masterSearchQuery.filter((data) => {
+        return data.name.indexOf(text) > -1;
+      });
+      setFilteredSearchQuery(newData);
+      setSearchQuery(text);
+    } else {
+      setFilteredSearchQuery(masterSearchQuery);
+      setSearchQuery(text);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <Pressable
         onPress={() => {
-          console.log(pokemonDetails?.stats);
+          console.log(filteredSearchQuery);
         }}
       >
         {({ pressed }) => (
@@ -62,44 +105,50 @@ export default function PokeDex() {
         )}
       </Pressable>
 
-      <BarChart
-        style={{ marginVertical: 8, borderRadius: 16 }}
-        data={{
-          labels: ["January", "February", "March", "April", "May", "June"],
-          datasets: [{ data: [20, 45, 28, 80, 99, 43] }],
-        }}
-        width={Dimensions.get("window").width}
-        height={220}
-        chartConfig={{
-          backgroundGradientFrom: "#fff",
-          backgroundGradientFromOpacity: 0,
-          backgroundGradientTo: "#fff",
-          backgroundGradientToOpacity: 0.5,
-
-          fillShadowGradient,
-          fillShadowGradientOpacity: 1,
-          color: (opacity = 1) => `#023047`,
-          labelColor: (opacity = 1) => `#333`,
-          strokeWidth: 2,
-
-          barPercentage: 0.5,
-          useShadowColorFromDataset: false,
-          decimalPlaces: 0,
-        }}
-        showBarTops={false}
-      />
+      <View
+        style={{ flexDirection: "row", marginBottom: 20, alignSelf: "center" }}
+      >
+        <Searchbar
+          style={{
+            width: Dimensions.get("window").width - 120,
+            marginRight: 5,
+          }}
+          inputStyle={{ fontSize: 15 }}
+          placeholder="Search your Pokemon"
+          onChangeText={(query) => searchFilterFunction(query)}
+          value={searchQuery}
+        />
+        <TouchableOpacity
+          style={{ borderRadius: 5, backgroundColor: "white", padding: 15 }}
+          onPress={() => {
+            if (sorting) {
+              filteredSearchQuery.sort((a, b) => a.name.localeCompare(b.name));
+            } else {
+              filteredSearchQuery.sort((a, b) => b.name.localeCompare(a.name));
+            }
+            setSorting(!sorting);
+          }}
+        >
+          <FontAwesome5
+            name={sorting ? "sort-alpha-down-alt" : "sort-alpha-down"}
+            size={17}
+            color="black"
+          />
+        </TouchableOpacity>
+      </View>
 
       <ScrollView>
         {!isLoading ? (
-          pokemons?.results?.map((data, i) => {
+          filteredSearchQuery?.map((data, i) => {
             return (
               <Pressable
+                key={i}
                 onPress={() => {
                   Services.fetchPokemonDetails(data.url).then((res) => {
                     setModalVisible(true);
-                    let _stats = res.stats.map((data, i) => {
+                    let _stats = res.stats.map((data) => {
                       return {
-                        key: i,
+                        key: data.key,
                         base_stat: data.base_stat,
                         name: data.stat.name,
                       };
@@ -116,13 +165,9 @@ export default function PokeDex() {
               >
                 {({ pressed }) => (
                   <Text
-                    index={i}
                     style={[
                       styles.textMaster,
-                      {
-                        marginBottom: 5,
-                        color: pressed ? "yellow" : "white",
-                      },
+                      { marginBottom: 5, color: pressed ? "yellow" : "white" },
                     ]}
                   >
                     {data.name}
@@ -136,57 +181,6 @@ export default function PokeDex() {
         )}
       </ScrollView>
 
-      {/* <Modal
-        visible={modalVisible}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setModalVisible(!modalVisible)}
-      >
-        <View style={styles.centeredView}>
-          <View style={styles.modalView}>
-            <Image
-              style={{ height: 80, width: 80 }}
-              source={{ uri: pokemonDetails?.front_default }}
-            />
-            <Text style={styles.modalText}>{pokemonDetails?.name}</Text>
-
-            <DataTable>
-              <DataTable.Header>
-                <DataTable.Title>Name</DataTable.Title>
-                <DataTable.Title>Base Stat</DataTable.Title>
-              </DataTable.Header>
-              {pokemonDetails
-                ? pokemonDetails?.stats?.map((data, i) => {
-                    return (
-                      <DataTable.Row key={i}>
-                        <DataTable.Cell>{data.name}</DataTable.Cell>
-                        <DataTable.Cell>{data.base_stat}</DataTable.Cell>
-                      </DataTable.Row>
-                    );
-                  })
-                : null}
-              <DataTable.Pagination
-                page={page}
-                numberOfPages={Math.ceil(items.length / itemsPerPage)}
-                onPageChange={(page) => setPage(page)}
-                label={`${from + 1}-${to} of ${items.length}`}
-                showFastPaginationControls
-                numberOfItemsPerPage={itemsPerPage}
-                numberOfItemsPerPageList={optionsPerPage}
-                onItemsPerPageChange={setItemsPerPage}
-                selectPageDropdownLabel="Rows per page"
-              />
-            </DataTable>
-
-            <Pressable
-              style={styles.button}
-              onPress={() => setModalVisible(!modalVisible)}
-            >
-              <Text style={styles.textStyle}>Close</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal> */}
       <Modal
         visible={modalVisible}
         animationType="fade"
@@ -248,28 +242,38 @@ export default function PokeDex() {
                 }}
                 width={Dimensions.get("window").width}
                 height={220}
-                yAxisLabel="$"
                 chartConfig={{
-                  backgroundColor: "#e26a00",
-                  backgroundGradientFrom: "#fb8c00",
-                  backgroundGradientTo: "#ffa726",
-                  decimalPlaces: 2, // optional, defaults to 2dp
-                  color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                  labelColor: (opacity = 1) =>
-                    `rgba(255, 255, 255, ${opacity})`,
-                  style: { borderRadius: 16 },
-                  propsForDots: { r: "6", strokeWidth: "2", stroke: "#ffa726" },
+                  backgroundGradientFrom: "#1E2923",
+                  backgroundGradientFromOpacity: 0,
+                  backgroundGradientTo: "#08130D",
+                  backgroundGradientToOpacity: 0.5,
+                  color: (opacity = 1) => `rgba(26, 255, 146, ${opacity})`,
+                  strokeWidth: 2, // optional, default 3
+                  barPercentage: 0.5,
+                  useShadowColorFromDataset: false, // optional
                 }}
-                bezier
+                showBarTops={false}
               /> */}
             </ScrollView>
-
-            <Pressable
-              style={styles.button}
-              onPress={() => setModalVisible(!modalVisible)}
-            >
-              <Text style={styles.textStyle}>Close</Text>
-            </Pressable>
+            <View style={{ flexDirection: "row" }}>
+              <Pressable
+                style={[styles.button, { marginRight: 10 }]}
+                onPress={() =>
+                  printToFile(
+                    pokemonDetails?.name,
+                    pokemonDetails?.front_default
+                  )
+                }
+              >
+                <Text style={styles.textStyle}>Print</Text>
+              </Pressable>
+              <Pressable
+                style={styles.button}
+                onPress={() => setModalVisible(!modalVisible)}
+              >
+                <Text style={styles.textStyle}>Close</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>

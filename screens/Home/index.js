@@ -10,7 +10,7 @@ import styles from "./styles";
 
 export default function Home({ navigation }) {
   const [text, setText] = useState("");
-  const conditionText = "e";
+  const conditionText = "Ready!";
 
   return (
     <SafeAreaView style={styles.container}>

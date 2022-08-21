@@ -93,17 +93,9 @@ export default function PokeDex() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Pressable
-        onPress={() => {
-          console.log(filteredSearchQuery);
-        }}
-      >
-        {({ pressed }) => (
-          <Text style={[styles.textMaster, { fontSize: 28 }]}>
-            {pressed ? "checking out" : "Welcome to pokedex!"}
-          </Text>
-        )}
-      </Pressable>
+      <Text style={[styles.textMaster, { fontSize: 28 }]}>
+        Welcome to pokedex!
+      </Text>
 
       <View
         style={{ flexDirection: "row", marginBottom: 20, alignSelf: "center" }}
